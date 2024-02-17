@@ -6,7 +6,6 @@
 
 typedef struct avl_node avl_node_t;
 
-
 /* ---------------------------------------------- */
 
 typedef struct avl_node_stack {
@@ -68,9 +67,7 @@ bool stack_is_empty(avl_node_stack_t *stack) {
 	return stack->top == -1;
 }
 
-
 /* ---------------------------------------------- */
-
 
 struct avl_node {
   	int value;
@@ -375,7 +372,11 @@ int avl_tree_insert(avl_tree_t *tree, int value) {
 }
 
 void avl_tree_print(avl_tree_t* tree) {
+#ifdef __APPLE__ 
+	printf("Tree Size: %llu, ", tree->size);
+#elif __linux__    
 	printf("Tree Size: %lu, ", tree->size);
+#endif 
 
 	avl_node_stack_t node_stack = stack_create(tree->size); 
 	avl_node_stack_t temp_stack = stack_create(tree->size);
@@ -496,7 +497,7 @@ int avl_node_remove(avl_node_t *node, int value) {
 
 	avl_tree_update(update_node);
 	
-	return -1;
+	return 0;
 }
 
 int avl_tree_remove(avl_tree_t *tree, int value) {
@@ -772,6 +773,13 @@ int main() {
 
 	print_ascii_tree(tree.root);
 	avl_tree_insert(&tree, 15);
+	print_ascii_tree(tree.root);
+
+	avl_tree_remove(&tree, 18);
+	print_ascii_tree(tree.root);
+
+
+	avl_tree_remove(&tree, 11);
 	print_ascii_tree(tree.root);
 
 	avl_tree_free(&tree);
