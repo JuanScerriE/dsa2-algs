@@ -4,17 +4,20 @@
 #include <stdbool.h>
 #include <string.h>
 
-typedef struct rb_node rb_node_t;
+typedef struct avl_node avl_node_t;
 
-typedef struct rb_node_stack {
-	rb_node_t **array;	
+
+/* ---------------------------------------------- */
+
+typedef struct avl_node_stack {
+	avl_node_t **array;	
 	uint32_t size;
 	int64_t top;
-} rb_node_stack_t;
+} avl_node_stack_t;
 
-rb_node_stack_t stack_create(uint32_t size) {
-	rb_node_stack_t stack = {
-		.array = (rb_node_t **)malloc(sizeof(rb_node_t *) * size),
+avl_node_stack_t stack_create(uint32_t size) {
+	avl_node_stack_t stack = {
+		.array = (avl_node_t **)malloc(sizeof(avl_node_t *) * size),
 		.size = size,
 		.top = -1
 	};
@@ -22,7 +25,7 @@ rb_node_stack_t stack_create(uint32_t size) {
 	return stack;
 }
 
-void stack_free(rb_node_stack_t *stack) {
+void stack_free(avl_node_stack_t *stack) {
 	if (stack->array != NULL) {
 		free(stack->array);
 	}
@@ -31,7 +34,7 @@ void stack_free(rb_node_stack_t *stack) {
 	stack->top = -1;
 }
 
-rb_node_t *stack_peek(rb_node_stack_t *stack) {
+avl_node_t *stack_peek(avl_node_stack_t *stack) {
 	if (stack->top == -1) {
 		return NULL;
 	}
@@ -39,19 +42,19 @@ rb_node_t *stack_peek(rb_node_stack_t *stack) {
 	return stack->array[stack->top];
 }
 
-rb_node_t *stack_pop(rb_node_stack_t *stack) {
+avl_node_t *stack_pop(avl_node_stack_t *stack) {
 	if (stack->top == -1) {
 		return NULL;
 	}
 
-	rb_node_t *node = stack->array[stack->top];
+	avl_node_t *node = stack->array[stack->top];
 
 	stack->array[(stack->top)--] = NULL;
 
 	return node;
 }
 
-int stack_push(rb_node_stack_t *stack, rb_node_t* node) {
+int stack_push(avl_node_stack_t *stack, avl_node_t* node) {
 	if (stack->top + 1 >= stack->size) {
 		return -1;
 	}
@@ -61,56 +64,70 @@ int stack_push(rb_node_stack_t *stack, rb_node_t* node) {
 	return 0;
 }
 
-bool stack_is_empty(rb_node_stack_t *stack) {
+bool stack_is_empty(avl_node_stack_t *stack) {
 	return stack->top == -1;
 }
 
 
-typedef enum rb_color {
-	BLACK,
-	RED
-} rb_color_t;
+/* ---------------------------------------------- */
 
-struct rb_node {
+
+struct avl_node {
   	int value;
-	rb_node_t *parent;
-  	rb_node_t *left;
-  	rb_node_t *right;
-	rb_color_t color;
+	avl_node_t *parent;
+  	avl_node_t *left;
+  	avl_node_t *right;
+  	int32_t left_height;
+  	int32_t right_height;
 };
 
 
-void rb_print_node(rb_node_t *node) {
-	printf("%p {\n  .value=%d\n  .parent=%p\n  .left=%p\n  .right=%p\n  .color=%d\n}\n", node, node->value, node->parent, node->left, node->right, node->color);
+void avl_print_node(avl_node_t *node) {
+	printf(
+	"%p {\n"
+	"  .value=%d\n"
+	"  .parent=%p\n"
+	"  .left=%p\n"
+	"  .right=%p\n"
+	"  .left_height=%d\n"
+	"  .right_height=%d\n"
+	"}\n",
+		node,
+		node->value,
+		node->parent,
+		node->left,
+		node->right,
+		node->left_height,
+		node->right_height);
 }
 
-typedef struct rb_tree {
-  	rb_node_t* root;
+typedef struct avl_tree {
+  	avl_node_t* root;
 	uint64_t size;
-} rb_tree_t;
+} avl_tree_t;
 
-#define RB_LEAF NULL
-
-rb_tree_t rb_tree_create(int value) {
-	rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
+avl_tree_t avl_tree_create(int value) {
+	avl_node_t *node = (avl_node_t *)malloc(sizeof(avl_node_t));
 	node->value = value;
-	node->color = BLACK;
-	node->left = RB_LEAF;
-	node->right = RB_LEAF;
+	node->parent = NULL;
+	node->left = NULL;
+	node->right = NULL;
+	node->left_height = 0;
+	node->right_height = 0;
 
-	rb_tree_t tree = { .root = node, .size = 1 };
+	avl_tree_t tree = { .root = node, .size = 1 };
 
 	return tree;
 }
 
-void rb_tree_free(rb_tree_t* tree) {
-	rb_node_stack_t node_stack = stack_create(tree->size); 
-	rb_node_stack_t temp_stack = stack_create(tree->size);
+void avl_tree_free(avl_tree_t* tree) {
+	avl_node_stack_t node_stack = stack_create(tree->size); 
+	avl_node_stack_t temp_stack = stack_create(tree->size);
 
 	stack_push(&temp_stack, tree->root);
 
 	while (!stack_is_empty(&temp_stack)) {
-		rb_node_t *node = stack_pop(&temp_stack);	
+		avl_node_t *node = stack_pop(&temp_stack);	
 
 		if (node->left != NULL) {
 			stack_push(&temp_stack, node->left);
@@ -139,95 +156,95 @@ static inline int max(int32_t x, int32_t y) {
 	return x < y ? y : x;
 }
 
-void rb_rotate_ll(rb_node_t *x, rb_node_t *y) {
-	rb_node_t *a = x;
-	rb_node_t *b = y;
+void avl_rotate_ll(avl_node_t *x, avl_node_t *y) {
+	avl_node_t temp_x = *x;
+	avl_node_t temp_y = *y;
 
-	rb_node_t temp_x = *x;
-	rb_node_t temp_y = *y;
+	x->value = temp_y.value;
+	y->value = temp_x.value;
 
-	a->value = temp_y.value;
-	b->value = temp_x.value;
+	x->right = y;
+	x->left = temp_y.left;
+	y->right = temp_x.right;
+	y->left = temp_y.right;
 
-	a->right = b;
-	a->left = temp_y.left;
-	
-	b->left = temp_y.right;
-	b->right = temp_x.right;
+	y->left_height = temp_y.right_height;
+	y->right_height = temp_x.right_height;
+	x->left_height = temp_y.left_height;
+	x->right_height = 1 + max(y->left_height, y->right_height);
 }
 
-void rb_rotate_lr(rb_node_t *x, rb_node_t *y) {
-	rb_node_t *z = y->right;
+void avl_rotate_lr(avl_node_t *x, avl_node_t *y) {
+	avl_node_t *z = y->right;
 
-	rb_node_t *a = x;
-	rb_node_t *b = y;
-	rb_node_t *c = z;
+	avl_node_t temp_x = *x;
+	avl_node_t temp_y = *y;
+	avl_node_t temp_z = *z;
 
-	rb_node_t temp_x = *x;
-	rb_node_t temp_y = *y;
-	rb_node_t temp_z = *z;
+	x->value = temp_z.value;
+	z->value = temp_x.value;
 
-	a->value = temp_z.value;
-	c->value = temp_x.value;
-	
-	a->left = b;
-	a->right = c;
+	x->right = z;
+	z->right = temp_x.right;
+	z->left = temp_z.right;
+	y->right = temp_z.left;
 
-	b->right = temp_z.left;
-
-	c->left = temp_z.right;
-	c->right = temp_x.right;
+	y->right_height = temp_z.left_height;
+	z->right_height = temp_x.right_height;
+	z->left_height = temp_z.right_height;
+	x->right_height = 1 + max(z->left_height, z->right_height);
+	x->left_height = 1 + max(y->left_height, y->right_height);
 }
 
-void rb_rotate_rr(rb_node_t *x, rb_node_t *y) {
-	rb_node_t *a = x;
-	rb_node_t *b = y;
-
-	rb_node_t temp_x = *x;
-	rb_node_t temp_y = *y;
-
-	a->value = temp_y.value;
-	b->value = temp_x.value;
-
-	a->right = temp_y.right;
-	a->left = b;
+void avl_rotate_rr(avl_node_t *x, avl_node_t *y) {
+	avl_node_t temp_x = *x;
+	avl_node_t temp_y = *y;
 	
-	b->left = temp_x.left;
-	b->right = temp_y.left;
+	x->value = temp_y.value;
+	y->value = temp_x.value;
+
+	x->left = y;
+	x->right = temp_y.right;
+	y->left = temp_x.left;
+	y->right = temp_y.left;
+
+	y->right_height = temp_y.left_height;
+	y->left_height = temp_x.left_height;
+	x->right_height = temp_y.right_height;
+	x->left_height = 1 + max(y->left_height, y->right_height);
 }
 
-void rb_rotate_rl(rb_node_t *x, rb_node_t *y) {
-	rb_node_t *z = y->left;
+void avl_rotate_rl(avl_node_t *x, avl_node_t *y) {
+	avl_node_t *z = y->left;
 
-	rb_node_t *a = x;
-	rb_node_t *b = y;
-	rb_node_t *c = z;
+	avl_node_t temp_x = *x;
+	avl_node_t temp_y = *y;
+	avl_node_t temp_z = *z;
 
-	rb_node_t temp_x = *x;
-	rb_node_t temp_y = *y;
-	rb_node_t temp_z = *z;
+	x->value = temp_z.value;
+	z->value = temp_x.value;
 
-	a->value = temp_z.value;
-	c->value = temp_x.value;
-	
-	a->right = b;
-	a->left = c;
+	x->left = z;
+	z->left = temp_x.left;
+	z->right = temp_z.left;
+	y->left = temp_z.right;
 
-	b->left = temp_z.right;
-
-	c->right = temp_z.left;
-	c->left = temp_x.left;
+	y->left_height = temp_z.right_height;
+	z->left_height = temp_x.left_height;
+	z->right_height = temp_z.left_height;
+	x->left_height = 1 + max(z->left_height, z->right_height);
+	x->right_height = 1 + max(y->left_height, y->right_height);
 }
 
-bool rb_can_step(rb_node_t *node, rb_node_t *new_node) {
+bool avl_can_step(avl_node_t *node, avl_node_t *new_node) {
 	// left
 	if (node->value > new_node->value) {
-		if (node->left == RB_LEAF) {
+		if (node->left == NULL) {
 			return false;
 		}
 	// right
 	} else {
-		if (node->right == RB_LEAF) {
+		if (node->right == NULL) {
 			return false;
 		}
 	}
@@ -235,48 +252,77 @@ bool rb_can_step(rb_node_t *node, rb_node_t *new_node) {
 	return true;
 }
 
-bool rb_is_black(rb_node_t *node) {
-	if (node == RB_LEAF) {
-		return true;
-	} else {
-		return node->color == BLACK;
-	}
+static inline int32_t avl_height_diff(avl_node_t *node) {
+	return node->left_height - node->right_height;
 }
 
-static inline rb_node_t *rb_get_sibling(rb_node_t *node) {
-	if (node->parent == NULL) {
-		return NULL;
-	}
-
-	return node->parent->left == node ? node->parent->right : node->parent->left;
-}
-
-bool rb_is_sibling_red(rb_node_t *node) {
-	rb_node_t *uncle = rb_get_sibling(node); 
-
-	if (uncle == NULL /* ( == RB_LEAF ) */ || uncle->color == BLACK) {
-		return false;
-	}
-
-	return true;
-}
-
-bool rb_is_left(rb_node_t *node, rb_node_t *other) {
+static inline bool avl_is_left(avl_node_t *node, avl_node_t *other) {
 	return node->left == other;
 }
 
-int rb_node_insert(rb_node_t *node, rb_node_t *x_node) {
-	rb_node_t *current_node = node;
+void avl_tree_update(avl_node_t *node) {
+	if (!node->left) {
+		node->left_height = 0;
+	} else {
+		node->left_height = 1 + max(node->left->left_height, node->left->right_height);
+	}
+
+	if (!node->right) {
+		node->right_height = 0;
+	} else {
+		node->right_height = 1 + max(node->right->left_height, node->right->right_height);
+	}
+
+	avl_node_t *parent_node = node->parent;
+
+	while (parent_node) {
+		if (avl_is_left(parent_node, node)) {
+			parent_node->left_height
+				= 1 + max(node->left_height, node->right_height);	
+		} else {
+			parent_node->right_height
+				= 1 + max(node->left_height, node->right_height);
+		}
+
+		int32_t height_diff = avl_height_diff(parent_node);
+
+		if (height_diff > 1) { // left heavy
+			// ll rotate
+			if (parent_node->left->left_height > parent_node->left->right_height) {
+				avl_rotate_ll(parent_node, parent_node->left);
+			// lr rotate
+			} else {
+				avl_rotate_lr(parent_node, parent_node->left);
+			}
+		}
+
+		if (height_diff < -1) { // right heavy
+			// rr rotate
+			if (parent_node->right->right_height > parent_node->right->left_height) {
+				avl_rotate_rr(parent_node, parent_node->right);
+			// rl rotate
+			} else {
+				avl_rotate_rl(parent_node, parent_node->right);
+
+			}
+		}
+
+		node = parent_node; parent_node = parent_node->parent;
+	}
+}
+
+int avl_node_insert(avl_node_t *node, avl_node_t *new_node) {
+	avl_node_t *current_node = node;
 
 	for (;;) {
-		bool can_step = rb_can_step(current_node, x_node);
+		bool can_step = avl_can_step(current_node, new_node);
 
 		if (can_step == false) {
 			break;
 		}
 		
 		// right
-		if (current_node->value <= x_node->value) {
+		if (current_node->value <= new_node->value) {
 			current_node = current_node->right;
 		// left
 		} else {
@@ -284,71 +330,36 @@ int rb_node_insert(rb_node_t *node, rb_node_t *x_node) {
 		}
 	}
 	
-	x_node->parent = current_node;
+	new_node->parent = current_node;
 
-	// right
-	if (current_node->value <= x_node->value) {
-		current_node->right = x_node;			
 	// left
+	if (current_node->value > new_node->value) {
+		current_node->left = new_node;			
+	// right
 	} else {
-		current_node->left = x_node;			
+		current_node->right = new_node;			
 	}
 
-	rb_node_t *parent_node = x_node->parent;
+	// proceed to update the heights of each node and rotate
+	// if necessary
 
-	while (parent_node != NULL && parent_node->color != BLACK) {
-		rb_node_t *grandparent_node = parent_node->parent;
-
-		if (rb_is_sibling_red(parent_node)) { // i.e. uncle of x_node
-			rb_node_t *sibling_node = rb_get_sibling(parent_node);
-
-			sibling_node->color = BLACK;
-			parent_node->color = BLACK;
-
-			if (grandparent_node->parent != NULL) { // i.e. if the grandparent node is not the root
-				grandparent_node->color = RED;
-			}
-		} else {
-			// left
-			if (rb_is_left(grandparent_node, parent_node)) {
-				// ll
-				if (rb_is_left(parent_node, x_node)) {
-					rb_rotate_ll(grandparent_node, parent_node);
-				// lr
-				} else {
-					rb_rotate_lr(grandparent_node, parent_node);
-				}
-			// right
-			} else {
-				// rl
-				if (rb_is_left(parent_node, x_node)) {
-					rb_rotate_rl(grandparent_node, parent_node);
-				// rr
-				} else {
-					rb_rotate_rr(grandparent_node, parent_node);	
-				}
-			}
-
-		}					
-
-		x_node = grandparent_node;
-		parent_node = grandparent_node->parent;
-	}
+	avl_tree_update(current_node);
 
 	return 0;
 }
 
 
-int avl_tree_insert(rb_tree_t *tree, int value) {
-	rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
+int avl_tree_insert(avl_tree_t *tree, int value) {
+	avl_node_t *node = (avl_node_t *)malloc(sizeof(avl_node_t));
 	node->value = value;
 	node->parent = NULL;
-	node->left = RB_LEAF;
-	node->right = RB_LEAF;
-	node->color = RED;
+	node->left = NULL;
+	node->right = NULL;
+	node->left_height = 0;
+	node->right_height = 0;
 
 	if (tree->root != NULL) {
-		if (rb_node_insert(tree->root, node) >= 0) {
+		if (avl_node_insert(tree->root, node) >= 0) {
 			tree->size++;
 
 			return 0;
@@ -357,24 +368,22 @@ int avl_tree_insert(rb_tree_t *tree, int value) {
 		return -1;
 	}
 
-	node->color = BLACK;
-
 	tree->root = node;
 	tree->size = 1;
 
 	return 0;
 }
 
-void avl_tree_print(rb_tree_t* tree) {
+void avl_tree_print(avl_tree_t* tree) {
 	printf("Tree Size: %lu, ", tree->size);
 
-	rb_node_stack_t node_stack = stack_create(tree->size); 
-	rb_node_stack_t temp_stack = stack_create(tree->size);
+	avl_node_stack_t node_stack = stack_create(tree->size); 
+	avl_node_stack_t temp_stack = stack_create(tree->size);
 
 	stack_push(&temp_stack, tree->root);
 
 	while (!stack_is_empty(&temp_stack)) {
-		rb_node_t *node = stack_pop(&temp_stack);	
+		avl_node_t *node = stack_pop(&temp_stack);	
 
 		if (node->left != NULL) {
 			stack_push(&temp_stack, node->left);
@@ -389,13 +398,9 @@ void avl_tree_print(rb_tree_t* tree) {
 
 
 	while (!stack_is_empty(&node_stack)) {
-		rb_node_t *node = stack_pop(&node_stack);
+		avl_node_t *node = stack_pop(&node_stack);
 
-		if (node->color == BLACK) {
-			printf("(B%d)", node->value);
-		} else {
-			printf("(R%d)", node->value);
-		}
+		printf("(%d)", node->value);
 	}
 
 	printf("\n");
@@ -404,9 +409,113 @@ void avl_tree_print(rb_tree_t* tree) {
 	stack_free(&temp_stack);
 }
 
-bool rb_tree_find();
+bool avl_is_leaf(avl_node_t *node) {
+	return node->left == NULL && node->right == NULL;
+}
 
-rb_node_t *rb_tree_remove();
+avl_node_t *avl_find_max(avl_node_t *node) {
+	avl_node_t *current_node = node;
+
+	while (current_node->right) {
+		current_node = current_node->right;
+	}
+
+	return current_node;
+}
+
+int avl_node_remove(avl_node_t *node, int value) {
+	avl_node_t *current_node = node;
+
+	bool found = false;
+
+	while (!found && current_node) {
+		if (current_node->value == value) {
+			found = true;
+		}
+
+		// left
+		if (current_node->value > value) {
+			current_node = current_node->left;
+		}
+
+		// right
+		if (current_node->value < value) {
+			current_node = current_node->right;
+		}
+	}
+
+	if (!found) {
+		return -1;
+	}
+
+	avl_node_t *update_node;
+
+	if (avl_is_leaf(current_node)) {
+		update_node = current_node->parent;
+
+		if (avl_is_left(update_node, current_node)) {
+			update_node->left = NULL;
+		} else {
+			update_node->right = NULL;
+		}
+
+		free(current_node);
+	} else {
+		if (current_node->left) {
+			avl_node_t *max_node = avl_find_max(current_node->left);
+
+			current_node->value = max_node->value;
+
+			if (max_node->left) {
+				max_node->value = max_node->left->value;
+
+				free(max_node->left);
+
+				max_node->left = NULL;
+
+				update_node = max_node;
+			} else {
+				max_node->parent->right = NULL;
+
+				update_node = max_node->parent;
+
+				free(max_node);
+			}
+		} else {
+			avl_node_t *right_node = current_node->right;
+			
+			current_node->value = right_node->value;
+
+			current_node->right = NULL;
+
+			free(right_node);
+
+			update_node = current_node;
+		}
+	}	
+
+	avl_tree_update(update_node);
+	
+	return -1;
+}
+
+int avl_tree_remove(avl_tree_t *tree, int value) {
+	if (tree->root == NULL) {
+		return 0;
+	}
+
+	if (avl_node_remove(tree->root, value) >= 0) { // >= 0 => found
+		tree->size--;
+
+		if (tree->size == 0) {
+			tree->root = NULL;
+		}
+
+		return 0;
+	}
+
+	return -1;
+}
 
 // TAKEN FROM THE INTERNET
 //
@@ -454,7 +563,7 @@ int MAX(int X, int Y) {
     return ((X) > (Y)) ? (X) : (Y);
 }
 
-asciinode *build_ascii_tree_recursive(rb_node_t *t) {
+asciinode *build_ascii_tree_recursive(avl_node_t *t) {
     asciinode *node;
 
     if (t == NULL) return NULL;
@@ -471,11 +580,7 @@ asciinode *build_ascii_tree_recursive(rb_node_t *t) {
         node->right->parent_dir = 1;
     }
 
-    if (t->color == BLACK) {
-	sprintf(node->label, "B%d", t->value);
-    } else {
-	sprintf(node->label, "R%d", t->value);
-    }
+    sprintf(node->label, "%d", t->value);
     node->lablen = (int) strlen(node->label);
 
     return node;
@@ -483,7 +588,7 @@ asciinode *build_ascii_tree_recursive(rb_node_t *t) {
 
 
 //Copy the tree into the ascii node structre
-asciinode *build_ascii_tree(rb_node_t *t) {
+asciinode *build_ascii_tree(avl_node_t *t) {
     asciinode *node;
     if (t == NULL) return NULL;
     node = build_ascii_tree_recursive(t);
@@ -628,7 +733,7 @@ void print_level(asciinode *node, int x, int level) {
 }
 
 //prints ascii tree for given Tree structure
-void print_ascii_tree(rb_node_t *t) {
+void print_ascii_tree(avl_node_t *t) {
     asciinode *proot;
     int xmin, i;
     if (t == NULL) return;
@@ -656,7 +761,7 @@ void print_ascii_tree(rb_node_t *t) {
 // THE ABOVE WAS TAKEN FROM THE INTERNET
 
 int main() {
-	rb_tree_t tree = rb_tree_create(7);
+	avl_tree_t tree = avl_tree_create(7);
 	avl_tree_insert(&tree, 3);
 	avl_tree_insert(&tree, 18);
 	avl_tree_insert(&tree, 10);
@@ -669,6 +774,6 @@ int main() {
 	avl_tree_insert(&tree, 15);
 	print_ascii_tree(tree.root);
 
-	rb_tree_free(&tree);
+	avl_tree_free(&tree);
 	return 0;
 }

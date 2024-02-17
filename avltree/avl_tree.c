@@ -246,7 +246,7 @@ int avl_node_insert(avl_node *node, avl_node *new_node) {
 					return avl_rotate_ll(node, node->left);
 				// lr rotation
 				} else {
-					return avl_rotate_ll(node, node->left);
+					return avl_rotate_lr(node, node->left);
 				}				
 
 			} else {
@@ -344,7 +344,45 @@ int avl_tree_insert(avl_tree *tree, int value) {
 
 bool avl_tree_find();
 
-avl_node *avl_tree_remove();
+bool avl_is_leaf(avl_node *node) {
+	return node->left == NULL && node->right == NULL;
+}
+
+int avl_node_remove(avl_node *node, int value) {
+	if (node->value == value) {
+		if (avl_is_leaf(node)) {
+					
+		}	
+	}
+
+	// left
+	if (node->value > value) {
+		avl_node_remove(node->left, value);
+		return 0;
+	}
+
+	// right
+	if (node->value < value) {
+		avl_node_remove(node->right, value);
+		return 0;
+	}
+
+	return -1;
+}
+
+int avl_tree_remove(avl_tree *tree, int value) {
+	if (tree->root == NULL) {
+		return 0;
+	}
+
+	if (avl_node_remove(tree->root, value) >= 0) { // >= 0 => found
+		tree->size--;
+
+		return 0;
+	}
+
+	return -1;
+}
 
 int main() {
 	avl_tree tree = avl_tree_create(10);
