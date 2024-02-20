@@ -393,7 +393,11 @@ void avl_tree_free(avl_tree_t *tree) {
 
 static inline int max(int32_t x, int32_t y) { return x < y ? y : x; }
 
-#define UPNULL(NODE, FIELD, VALUE) ({ if (NODE) NODE->FIELD = VALUE; })
+#define UPNULL(NODE, FIELD, VALUE)                                             \
+  ({                                                                           \
+    if (NODE)                                                                  \
+      NODE->FIELD = VALUE;                                                     \
+  })
 
 void avl_rotate_ll(avl_node_t *x, avl_node_t *y) {
   avl_node_t temp_x = *x;
