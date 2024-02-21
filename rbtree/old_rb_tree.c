@@ -68,8 +68,8 @@ bool stack_is_empty(rb_node_stack_t *stack) { return stack->top == -1; }
 
 typedef enum rb_color { BLACK, RED } rb_color_t;
 
-#define LEFT (0)
-#define RIGHT (1)
+#define LEFT 0
+#define RIGHT 1
 #define DIR(PARENT, CHILD) ((PARENT->child[LEFT] == CHILD) ? LEFT : RIGHT)
 #define LCHILD(PARENT) (PARENT->child[LEFT])
 #define RCHILD(PARENT) (PARENT->child[RIGHT])
@@ -549,12 +549,12 @@ void rb_tree_insert(rb_tree_t *tree, int value) {
   tree->size = 1;
 }
 
-void rb_tree_remove(rb_tree_t *tree, int value) {
-
-}
-
 void rb_tree_print(rb_tree_t *tree) {
+#ifdef __APPLE__
+  printf("Tree Size: %llu, ", tree->size);
+#elif __linux__
   printf("Tree Size: %lu, ", tree->size);
+#endif
 
   rb_node_stack_t node_stack = stack_create(tree->size);
   rb_node_stack_t temp_stack = stack_create(tree->size);
@@ -590,34 +590,175 @@ void rb_tree_print(rb_tree_t *tree) {
   stack_free(&node_stack);
   stack_free(&temp_stack);
 }
-//
-// bool rb_tree_find();
-//
 
-int main() {
-  rb_tree_t tree = rb_tree_create(7);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 3);
-  rb_print_node(tree.root);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 18);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 10);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 22);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 26);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 8);
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 11);
-  rb_tree_print(&tree);
-
-  printf("before first tree\n");
-  print_ascii_tree(tree.root);
-  rb_tree_insert(&tree, 15);
-  print_ascii_tree(tree.root);
-
-  rb_tree_free(&tree);
-  return 0;
+static inline bool rb_is_leaf(rb_node_t *node) {
+  return LCHILD(node) == NIL && RCHILD(node) == NIL;
 }
+
+rb_node_t *rb_find_max(rb_node_t *node) {
+  rb_node_t *current_node = node;
+
+  while (RCHILD(current_node)) {
+    current_node = RCHILD(current_node);
+  }
+
+  return current_node;
+}
+
+int rb_node_remove(rb_node_t *node, int value) {
+  rb_node_t *current_node = node;
+
+  bool found = false;
+
+  while (!found && current_node) {
+    if (current_node->value == value) {
+      found = true;
+    }
+
+    current_node =
+        current_node->child[current_node->value < value ? RIGHT : LEFT];
+  }
+
+  if (!found) {
+    return -1;
+  }
+
+  rb_node_t *update_node;
+
+  if (LCHILD(current_node) == NIL && RCHILD(current_node) == NIL) {
+    if (current_node->color == RED) {
+      rb_node_t *parent_node = current_node->parent;
+
+      parent_node->child[DIR(parent_node, current_node)] = NIL;
+
+      free(current_node);
+    } else { // black leaf
+      return 0;
+    }
+  }
+
+  if (LCHILD(current_node) != NIL && RCHILD(current_node) != NIL) {
+    rb_node_t *max_node = rb_find_max(LCHILD(current_node));
+
+    current_node->value = max_node->value;
+
+    if (LCHILD(max_node)) {
+      max_node->value = LCHILD(max_node)->value;
+
+      free(LCHILD(max_node));
+
+      LCHILD(max_node) = NIL;
+    } else { // max_node is a leaf node
+      if (max_node->color == RED) {
+        rb_node_t *parent_node = current_node->parent;
+
+        parent_node->child[DIR(parent_node, max_node)] = NIL;
+
+        free(max_node);
+      } else { // black leaf
+        return 0;
+      }
+    }
+  }
+
+#define NILDIR(X) ((LCHILD(X) == NIL) ? LEFT : RIGHT)
+  
+
+
+    {
+      if (LCHILD(current_node) != NIL &&
+          RCHILD(current_node) == NIL) { // left node only
+        rb_node_t *left_node = LCHILD(current_node);
+
+        current_node->value = left_node->value;
+        LCHILD(current_node) = NIL;
+
+        free(left_node);
+      } else if (LCHILD(current_node) == NIL &&
+                 RCHILD(current_node) != NIL) { // right node only
+        rb_node_t *right_node = current_node->right;
+
+        current_node->value = right_node->value;
+        current_node->right = RB_LEAF;
+
+        free(right_node);
+      } else { // both children are present
+        rb_node_t *max_node = rb_find_max(current_node->left);
+
+        printf("Max\n");
+        rb_print_node(max_node);
+
+        current_node->value = max_node->value;
+
+        if (max_node->left) {
+          max_node->value = max_node->left->value;
+          max_node->left = RB_LEAF;
+
+          free(max_node->left);
+        } else { // max_node is a leaf node
+          if (max_node->color == RED) {
+            rb_node_t *parent_node = max_node->parent;
+
+            if (rb_is_left(parent_node, max_node)) {
+              parent_node->left = RB_LEAF;
+            } else {
+              parent_node->right = RB_LEAF;
+            }
+
+            free(max_node);
+          } else { // black leaf
+          }
+        }
+      }
+    }
+
+    avl_tree_update(update_node);
+
+    return 0;
+  }
+
+  int rb_tree_remove(rb_tree_t * tree, int value) {
+    if (tree->root == NULL) {
+      return 0;
+    }
+
+    if (rb_node_remove(tree->root, value) >= 0) { // >= 0 => found
+      tree->size--;
+
+      if (tree->size == 0) {
+        tree->root = NULL;
+      }
+
+      return 0;
+    }
+
+    return -1;
+  }
+
+  int main() {
+    rb_tree_t tree = rb_tree_create(7);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 3);
+    rb_print_node(tree.root);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 18);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 10);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 22);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 26);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 8);
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 11);
+    rb_tree_print(&tree);
+
+    printf("before first tree\n");
+    print_ascii_tree(tree.root);
+    rb_tree_insert(&tree, 15);
+    print_ascii_tree(tree.root);
+
+    rb_tree_free(&tree);
+    return 0;
+  }

@@ -72,479 +72,482 @@ struct rb_node {
   rb_color_t color;
 };
 
-void rb_print_node(rb_node_t *node) {
-  if (node) {
-    printf("%p {\n"
-           "  .value=%d\n"
-           "  .parent=%p\n"
-           "  .left=%p\n"
-           "  .right=%p\n"
-           "  .color=%s\n"
-           "}\n",
-           node, node->value, node->parent, node->left, node->right,
-           node->color == BLACK ? "BLACK" : "RED");
-  } else {
-    printf("(nil)\n");
-  }
-}
-
-typedef struct rb_tree {
-  rb_node_t *root;
-  uint64_t size;
-} rb_tree_t;
-
-#define RB_LEAF NULL
-
-rb_tree_t rb_tree_create(int value) {
-  rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
-  node->value = value;
-  node->left = RB_LEAF;
-  node->right = RB_LEAF;
-  node->color = BLACK;
-
-  rb_tree_t tree = {.root = node, .size = 1};
-
-  return tree;
-}
-
-void rb_tree_free(rb_tree_t *tree) {
-  rb_node_stack_t node_stack = stack_create(tree->size);
-  rb_node_stack_t temp_stack = stack_create(tree->size);
-
-  stack_push(&temp_stack, tree->root);
-
-  while (!stack_is_empty(&temp_stack)) {
-    rb_node_t *node = stack_pop(&temp_stack);
-
-    if (node->left != NULL) {
-      stack_push(&temp_stack, node->left);
-    }
-
-    if (node->right != NULL) {
-      stack_push(&temp_stack, node->right);
-    }
-
-    stack_push(&node_stack, node);
-  }
-
-  while (!stack_is_empty(&node_stack)) {
-    free(stack_pop(&node_stack));
-  }
-
-  stack_free(&node_stack);
-  stack_free(&temp_stack);
-
-  tree->root = NULL;
-  tree->size = 0;
-}
-
-static inline int max(int32_t x, int32_t y) { return x < y ? y : x; }
-
-void rb_rotate_ll(rb_node_t *x, rb_node_t *y) {
-  rb_node_t *a = x;
-  rb_node_t *b = y;
-
-  rb_node_t temp_x = *x;
-  rb_node_t temp_y = *y;
-
-  a->value = temp_y.value;
-  b->value = temp_x.value;
-
-  a->right = b;
-  a->left = temp_y.left;
-
-  b->left = temp_y.right;
-  b->right = temp_x.right;
-}
-
-void rb_rotate_lr(rb_node_t *x, rb_node_t *y) {
-  rb_node_t *z = y->right;
-
-  rb_node_t *a = x;
-  rb_node_t *b = y;
-  rb_node_t *c = z;
-
-  rb_node_t temp_x = *x;
-  rb_node_t temp_y = *y;
-  rb_node_t temp_z = *z;
-
-  a->value = temp_z.value;
-  c->value = temp_x.value;
-
-  a->left = b;
-  a->right = c;
-
-  b->right = temp_z.left;
-
-  c->left = temp_z.right;
-  c->right = temp_x.right;
-}
-
-void rb_rotate_rr(rb_node_t *x, rb_node_t *y) {
-  rb_node_t *a = x;
-  rb_node_t *b = y;
-
-  rb_node_t temp_x = *x;
-  rb_node_t temp_y = *y;
-
-  a->value = temp_y.value;
-  b->value = temp_x.value;
-
-  a->right = temp_y.right;
-  a->left = b;
-
-  b->left = temp_x.left;
-  b->right = temp_y.left;
-}
-
-void rb_rotate_rl(rb_node_t *x, rb_node_t *y) {
-  rb_node_t *z = y->left;
-
-  rb_node_t *a = x;
-  rb_node_t *b = y;
-  rb_node_t *c = z;
-
-  rb_node_t temp_x = *x;
-  rb_node_t temp_y = *y;
-  rb_node_t temp_z = *z;
-
-  a->value = temp_z.value;
-  c->value = temp_x.value;
-
-  a->right = b;
-  a->left = c;
-
-  b->left = temp_z.right;
-
-  c->right = temp_z.left;
-  c->left = temp_x.left;
-}
-
-bool rb_can_step(rb_node_t *node, rb_node_t *new_node) {
-  // left
-  if (node->value > new_node->value) {
-    if (node->left == RB_LEAF) {
-      return false;
-    }
-    // right
-  } else {
-    if (node->right == RB_LEAF) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool rb_is_black(rb_node_t *node) {
-  if (node == RB_LEAF) {
-    return true;
-  } else {
-    return node->color == BLACK;
-  }
-}
-
-static inline rb_node_t *rb_get_sibling(rb_node_t *node) {
-  if (node->parent == NULL) {
-    return NULL;
-  }
-
-  return node->parent->left == node ? node->parent->right : node->parent->left;
-}
-
-bool rb_is_sibling_red(rb_node_t *node) {
-  rb_node_t *uncle = rb_get_sibling(node);
-
-  if (uncle == NULL /* ( == RB_LEAF ) */ || uncle->color == BLACK) {
-    return false;
-  }
-
-  return true;
-}
-
-bool rb_is_left(rb_node_t *node, rb_node_t *other) {
-  return node->left == other;
-}
-
-int rb_node_insert(rb_node_t *node, rb_node_t *x_node) {
-  rb_node_t *current_node = node;
-
-  for (;;) {
-    bool can_step = rb_can_step(current_node, x_node);
-
-    if (can_step == false) {
-      break;
-    }
-
-    // right
-    if (current_node->value <= x_node->value) {
-      current_node = current_node->right;
-      // left
-    } else {
-      current_node = current_node->left;
-    }
-  }
-
-  x_node->parent = current_node;
-
-  // right
-  if (current_node->value <= x_node->value) {
-    current_node->right = x_node;
-    // left
-  } else {
-    current_node->left = x_node;
-  }
-
-  rb_node_t *parent_node = x_node->parent;
-
-  while (parent_node != NULL && parent_node->color != BLACK) {
-    rb_node_t *grandparent_node = parent_node->parent;
-
-    if (rb_is_sibling_red(parent_node)) { // i.e. uncle of x_node
-      rb_node_t *sibling_node = rb_get_sibling(parent_node);
-
-      sibling_node->color = BLACK;
-      parent_node->color = BLACK;
-
-      if (grandparent_node->parent !=
-          NULL) { // i.e. if the grandparent node is not the root
-        grandparent_node->color = RED;
-      }
-    } else {
-      // left
-      if (rb_is_left(grandparent_node, parent_node)) {
-        // ll
-        if (rb_is_left(parent_node, x_node)) {
-          rb_rotate_ll(grandparent_node, parent_node);
-          // lr
-        } else {
-          rb_rotate_lr(grandparent_node, parent_node);
-        }
-        // right
-      } else {
-        // rl
-        if (rb_is_left(parent_node, x_node)) {
-          rb_rotate_rl(grandparent_node, parent_node);
-          // rr
-        } else {
-          rb_rotate_rr(grandparent_node, parent_node);
-        }
-      }
-    }
-
-    x_node = grandparent_node;
-    parent_node = grandparent_node->parent;
-  }
-
-  return 0;
-}
-
-int avl_tree_insert(rb_tree_t *tree, int value) {
-  rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
-  node->value = value;
-  node->parent = NULL;
-  node->left = RB_LEAF;
-  node->right = RB_LEAF;
-  node->color = RED;
-
-  if (tree->root != NULL) {
-    if (rb_node_insert(tree->root, node) >= 0) {
-      tree->size++;
-
-      return 0;
-    }
-
-    return -1;
-  }
-
-  node->color = BLACK;
-
-  tree->root = node;
-  tree->size = 1;
-
-  return 0;
-}
-
-void avl_tree_print(rb_tree_t *tree) {
-#ifdef __APPLE__
-  printf("Tree Size: %llu, ", tree->size);
-#elif __linux__
-  printf("Tree Size: %lu, ", tree->size);
-#endif
-
-  rb_node_stack_t node_stack = stack_create(tree->size);
-  rb_node_stack_t temp_stack = stack_create(tree->size);
-
-  stack_push(&temp_stack, tree->root);
-
-  while (!stack_is_empty(&temp_stack)) {
-    rb_node_t *node = stack_pop(&temp_stack);
-
-    if (node->left != NULL) {
-      stack_push(&temp_stack, node->left);
-    }
-
-    if (node->right != NULL) {
-      stack_push(&temp_stack, node->right);
-    }
-
-    stack_push(&node_stack, node);
-  }
-
-  while (!stack_is_empty(&node_stack)) {
-    rb_node_t *node = stack_pop(&node_stack);
-
-    if (node->color == BLACK) {
-      printf("(B%d)", node->value);
-    } else {
-      printf("(R%d)", node->value);
-    }
-  }
-
-  printf("\n");
-
-  stack_free(&node_stack);
-  stack_free(&temp_stack);
-}
-
-bool rb_tree_find();
-
-
-bool rb_is_leaf(rb_node_t *node) {
-  return node->left == NULL && node->right == NULL;
-}
-
-rb_node_t *rb_find_max(rb_node_t *node) {
-  rb_node_t *current_node = node;
-
-  printf("Find\n");
-  rb_print_node(current_node);
-
-  while (current_node->right) {
-    current_node = current_node->right;
-    rb_print_node(current_node);
-  }
-
-  return current_node;
-}
-
-void rb_handle_black_leaf(rb_node_t *leaf) {
-
-}
-
-int rb_node_remove(rb_node_t *node, int value) {
-  rb_node_t *current_node = node;
-
-  bool found = false;
-
-  while (!found && current_node) {
-    if (current_node->value == value) {
-      found = true;
-    }
-
-    // left
-    if (current_node->value > value) {
-      current_node = current_node->left;
-    }
-
-    // right
-    if (current_node->value < value) {
-      current_node = current_node->right;
-    }
-  }
-
-  if (!found) {
-    return -1;
-  }
-
-  rb_node_t *update_node;
-
-  printf("Delete\n");
-  rb_print_node(current_node);
-
-  if (rb_is_leaf(current_node)) {
-    if (current_node->color == RED) {
-      rb_node_t *parent_node = current_node->parent;
-
-      if (rb_is_left(parent_node, current_node)) {
-        parent_node->left = RB_LEAF;
-      } else {
-        parent_node->right = RB_LEAF;
-      }
-
-      free(current_node); 
-    } else { // black leaf
-
-    }
-  } else {
-    if (current_node->left != NULL && current_node->right == NULL) { // left node only
-      rb_node_t *left_node = current_node->left;
-
-      current_node->value = left_node->value;
-      current_node->left = RB_LEAF;
-
-      free(left_node);
-    } else if (current_node->left == NULL && current_node->right != NULL) { // right node only
-      rb_node_t *right_node = current_node->right;
-
-      current_node->value = right_node->value;
-      current_node->right = RB_LEAF;
-
-      free(right_node);
-    } else { // both children are present
-      rb_node_t *max_node = rb_find_max(current_node->left);
-
-      printf("Max\n");
-      rb_print_node(max_node);
-
-      current_node->value = max_node->value;
-
-      if (max_node->left) {
-        max_node->value = max_node->left->value;
-        max_node->left = RB_LEAF;
-
-        free(max_node->left);
-      } else { // max_node is a leaf node
-        if (max_node->color == RED) {
-          rb_node_t *parent_node = max_node->parent;
-
-          if (rb_is_left(parent_node, max_node)) {
-            parent_node->left = RB_LEAF;
-          } else {
-            parent_node->right = RB_LEAF;
-          }
-
-          free(max_node); 
-        } else { // black leaf
-
-        }
-      }
-    }
-  }
-
-  avl_tree_update(update_node);
-
-  return 0;
-}
-
-int rb_tree_remove(rb_tree_t *tree, int value) {
-  if (tree->root == NULL) {
-    return 0;
-  }
-
-  if (rb_node_remove(tree->root, value) >= 0) { // >= 0 => found
-    tree->size--;
-
-    if (tree->size == 0) {
-      tree->root = NULL;
-    }
-
-    return 0;
-  }
-
-  return -1;
-}
-
+// <<<<<<< Updated upstream
+// void rb_print_node(rb_node_t *node) {
+//   if (node) {
+//     printf("%p {\n"
+//            "  .value=%d\n"
+//            "  .parent=%p\n"
+//            "  .left=%p\n"
+//            "  .right=%p\n"
+//            "  .color=%s\n"
+//            "}\n",
+//            node, node->value, node->parent, node->left, node->right,
+//            node->color == BLACK ? "BLACK" : "RED");
+//   } else {
+//     printf("(nil)\n");
+//   }
+// }
+//
+// typedef struct rb_tree {
+//   rb_node_t *root;
+//   uint64_t size;
+// } rb_tree_t;
+//
+// #define RB_LEAF NULL
+//
+// rb_tree_t rb_tree_create(int value) {
+//   rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
+//   node->value = value;
+//   node->left = RB_LEAF;
+//   node->right = RB_LEAF;
+//   node->color = BLACK;
+//
+//   rb_tree_t tree = {.root = node, .size = 1};
+//
+//   return tree;
+// }
+//
+// void rb_tree_free(rb_tree_t *tree) {
+//   rb_node_stack_t node_stack = stack_create(tree->size);
+//   rb_node_stack_t temp_stack = stack_create(tree->size);
+//
+//   stack_push(&temp_stack, tree->root);
+//
+//   while (!stack_is_empty(&temp_stack)) {
+//     rb_node_t *node = stack_pop(&temp_stack);
+//
+//     if (node->left != NULL) {
+//       stack_push(&temp_stack, node->left);
+//     }
+//
+//     if (node->right != NULL) {
+//       stack_push(&temp_stack, node->right);
+//     }
+//
+//     stack_push(&node_stack, node);
+//   }
+//
+//   while (!stack_is_empty(&node_stack)) {
+//     free(stack_pop(&node_stack));
+//   }
+//
+//   stack_free(&node_stack);
+//   stack_free(&temp_stack);
+//
+//   tree->root = NULL;
+//   tree->size = 0;
+// }
+//
+// static inline int max(int32_t x, int32_t y) { return x < y ? y : x; }
+//
+// void rb_rotate_ll(rb_node_t *x, rb_node_t *y) {
+//   rb_node_t *a = x;
+//   rb_node_t *b = y;
+//
+//   rb_node_t temp_x = *x;
+//   rb_node_t temp_y = *y;
+//
+//   a->value = temp_y.value;
+//   b->value = temp_x.value;
+//
+//   a->right = b;
+//   a->left = temp_y.left;
+//
+//   b->left = temp_y.right;
+//   b->right = temp_x.right;
+// }
+//
+// void rb_rotate_lr(rb_node_t *x, rb_node_t *y) {
+//   rb_node_t *z = y->right;
+//
+//   rb_node_t *a = x;
+//   rb_node_t *b = y;
+//   rb_node_t *c = z;
+//
+//   rb_node_t temp_x = *x;
+//   rb_node_t temp_y = *y;
+//   rb_node_t temp_z = *z;
+//
+//   a->value = temp_z.value;
+//   c->value = temp_x.value;
+//
+//   a->left = b;
+//   a->right = c;
+//
+//   b->right = temp_z.left;
+//
+//   c->left = temp_z.right;
+//   c->right = temp_x.right;
+// }
+//
+// void rb_rotate_rr(rb_node_t *x, rb_node_t *y) {
+//   rb_node_t *a = x;
+//   rb_node_t *b = y;
+//
+//   rb_node_t temp_x = *x;
+//   rb_node_t temp_y = *y;
+//
+//   a->value = temp_y.value;
+//   b->value = temp_x.value;
+//
+//   a->right = temp_y.right;
+//   a->left = b;
+//
+//   b->left = temp_x.left;
+//   b->right = temp_y.left;
+// }
+//
+// void rb_rotate_rl(rb_node_t *x, rb_node_t *y) {
+//   rb_node_t *z = y->left;
+//
+//   rb_node_t *a = x;
+//   rb_node_t *b = y;
+//   rb_node_t *c = z;
+//
+//   rb_node_t temp_x = *x;
+//   rb_node_t temp_y = *y;
+//   rb_node_t temp_z = *z;
+//
+//   a->value = temp_z.value;
+//   c->value = temp_x.value;
+//
+//   a->right = b;
+//   a->left = c;
+//
+//   b->left = temp_z.right;
+//
+//   c->right = temp_z.left;
+//   c->left = temp_x.left;
+// }
+//
+// bool rb_can_step(rb_node_t *node, rb_node_t *new_node) {
+//   // left
+//   if (node->value > new_node->value) {
+//     if (node->left == RB_LEAF) {
+//       return false;
+//     }
+//     // right
+//   } else {
+//     if (node->right == RB_LEAF) {
+//       return false;
+//     }
+//   }
+//
+//   return true;
+// }
+//
+// bool rb_is_black(rb_node_t *node) {
+//   if (node == RB_LEAF) {
+//     return true;
+//   } else {
+//     return node->color == BLACK;
+//   }
+// }
+//
+// static inline rb_node_t *rb_get_sibling(rb_node_t *node) {
+//   if (node->parent == NULL) {
+//     return NULL;
+//   }
+//
+//   return node->parent->left == node ? node->parent->right : node->parent->left;
+// }
+//
+// bool rb_is_sibling_red(rb_node_t *node) {
+//   rb_node_t *uncle = rb_get_sibling(node);
+//
+//   if (uncle == NULL /* ( == RB_LEAF ) */ || uncle->color == BLACK) {
+//     return false;
+//   }
+//
+//   return true;
+// }
+//
+// bool rb_is_left(rb_node_t *node, rb_node_t *other) {
+//   return node->left == other;
+// }
+//
+// int rb_node_insert(rb_node_t *node, rb_node_t *x_node) {
+//   rb_node_t *current_node = node;
+//
+//   for (;;) {
+//     bool can_step = rb_can_step(current_node, x_node);
+//
+//     if (can_step == false) {
+//       break;
+//     }
+//
+//     // right
+//     if (current_node->value <= x_node->value) {
+//       current_node = current_node->right;
+//       // left
+//     } else {
+//       current_node = current_node->left;
+//     }
+//   }
+//
+//   x_node->parent = current_node;
+//
+//   // right
+//   if (current_node->value <= x_node->value) {
+//     current_node->right = x_node;
+//     // left
+//   } else {
+//     current_node->left = x_node;
+//   }
+//
+//   rb_node_t *parent_node = x_node->parent;
+//
+//   while (parent_node != NULL && parent_node->color != BLACK) {
+//     rb_node_t *grandparent_node = parent_node->parent;
+//
+//     if (rb_is_sibling_red(parent_node)) { // i.e. uncle of x_node
+//       rb_node_t *sibling_node = rb_get_sibling(parent_node);
+//
+//       sibling_node->color = BLACK;
+//       parent_node->color = BLACK;
+//
+//       if (grandparent_node->parent !=
+//           NULL) { // i.e. if the grandparent node is not the root
+//         grandparent_node->color = RED;
+//       }
+//     } else {
+//       // left
+//       if (rb_is_left(grandparent_node, parent_node)) {
+//         // ll
+//         if (rb_is_left(parent_node, x_node)) {
+//           rb_rotate_ll(grandparent_node, parent_node);
+//           // lr
+//         } else {
+//           rb_rotate_lr(grandparent_node, parent_node);
+//         }
+//         // right
+//       } else {
+//         // rl
+//         if (rb_is_left(parent_node, x_node)) {
+//           rb_rotate_rl(grandparent_node, parent_node);
+//           // rr
+//         } else {
+//           rb_rotate_rr(grandparent_node, parent_node);
+//         }
+//       }
+//     }
+//
+//     x_node = grandparent_node;
+//     parent_node = grandparent_node->parent;
+//   }
+//
+//   return 0;
+// }
+//
+// int avl_tree_insert(rb_tree_t *tree, int value) {
+//   rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
+//   node->value = value;
+//   node->parent = NULL;
+//   node->left = RB_LEAF;
+//   node->right = RB_LEAF;
+//   node->color = RED;
+//
+//   if (tree->root != NULL) {
+//     if (rb_node_insert(tree->root, node) >= 0) {
+//       tree->size++;
+//
+//       return 0;
+//     }
+//
+//     return -1;
+//   }
+//
+//   node->color = BLACK;
+//
+//   tree->root = node;
+//   tree->size = 1;
+//
+//   return 0;
+// }
+//
+// void avl_tree_print(rb_tree_t *tree) {
+// #ifdef __APPLE__
+//   printf("Tree Size: %llu, ", tree->size);
+// #elif __linux__
+//   printf("Tree Size: %lu, ", tree->size);
+// #endif
+//
+//   rb_node_stack_t node_stack = stack_create(tree->size);
+//   rb_node_stack_t temp_stack = stack_create(tree->size);
+//
+//   stack_push(&temp_stack, tree->root);
+//
+//   while (!stack_is_empty(&temp_stack)) {
+//     rb_node_t *node = stack_pop(&temp_stack);
+//
+//     if (node->left != NULL) {
+//       stack_push(&temp_stack, node->left);
+//     }
+//
+//     if (node->right != NULL) {
+//       stack_push(&temp_stack, node->right);
+//     }
+//
+//     stack_push(&node_stack, node);
+//   }
+//
+//   while (!stack_is_empty(&node_stack)) {
+//     rb_node_t *node = stack_pop(&node_stack);
+//
+//     if (node->color == BLACK) {
+//       printf("(B%d)", node->value);
+//     } else {
+//       printf("(R%d)", node->value);
+//     }
+//   }
+//
+//   printf("\n");
+//
+//   stack_free(&node_stack);
+//   stack_free(&temp_stack);
+// }
+//
+// bool rb_tree_find();
+//
+//
+// bool rb_is_leaf(rb_node_t *node) {
+//   return node->left == NULL && node->right == NULL;
+// }
+//
+// rb_node_t *rb_find_max(rb_node_t *node) {
+//   rb_node_t *current_node = node;
+//
+//   printf("Find\n");
+//   rb_print_node(current_node);
+//
+//   while (current_node->right) {
+//     current_node = current_node->right;
+//     rb_print_node(current_node);
+//   }
+//
+//   return current_node;
+// }
+//
+// void rb_handle_black_leaf(rb_node_t *leaf) {
+//
+// }
+//
+// int rb_node_remove(rb_node_t *node, int value) {
+//   rb_node_t *current_node = node;
+//
+//   bool found = false;
+//
+//   while (!found && current_node) {
+//     if (current_node->value == value) {
+//       found = true;
+//     }
+//
+//     // left
+//     if (current_node->value > value) {
+//       current_node = current_node->left;
+//     }
+//
+//     // right
+//     if (current_node->value < value) {
+//       current_node = current_node->right;
+//     }
+//   }
+//
+//   if (!found) {
+//     return -1;
+//   }
+//
+//   rb_node_t *update_node;
+//
+//   printf("Delete\n");
+//   rb_print_node(current_node);
+//
+//   if (rb_is_leaf(current_node)) {
+//     if (current_node->color == RED) {
+//       rb_node_t *parent_node = current_node->parent;
+//
+//       if (rb_is_left(parent_node, current_node)) {
+//         parent_node->left = RB_LEAF;
+//       } else {
+//         parent_node->right = RB_LEAF;
+//       }
+//
+//       free(current_node); 
+//     } else { // black leaf
+//
+//     }
+//   } else {
+//     if (current_node->left != NULL && current_node->right == NULL) { // left node only
+//       rb_node_t *left_node = current_node->left;
+//
+//       current_node->value = left_node->value;
+//       current_node->left = RB_LEAF;
+//
+//       free(left_node);
+//     } else if (current_node->left == NULL && current_node->right != NULL) { // right node only
+//       rb_node_t *right_node = current_node->right;
+//
+//       current_node->value = right_node->value;
+//       current_node->right = RB_LEAF;
+//
+//       free(right_node);
+//     } else { // both children are present
+//       rb_node_t *max_node = rb_find_max(current_node->left);
+//
+//       printf("Max\n");
+//       rb_print_node(max_node);
+//
+//       current_node->value = max_node->value;
+//
+//       if (max_node->left) {
+//         max_node->value = max_node->left->value;
+//         max_node->left = RB_LEAF;
+//
+//         free(max_node->left);
+//       } else { // max_node is a leaf node
+//         if (max_node->color == RED) {
+//           rb_node_t *parent_node = max_node->parent;
+//
+//           if (rb_is_left(parent_node, max_node)) {
+//             parent_node->left = RB_LEAF;
+//           } else {
+//             parent_node->right = RB_LEAF;
+//           }
+//
+//           free(max_node); 
+//         } else { // black leaf
+//
+//         }
+//       }
+//     }
+//   }
+//
+//   avl_tree_update(update_node);
+//
+//   return 0;
+// }
+//
+// int rb_tree_remove(rb_tree_t *tree, int value) {
+//   if (tree->root == NULL) {
+//     return 0;
+//   }
+//
+//   if (rb_node_remove(tree->root, value) >= 0) { // >= 0 => found
+//     tree->size--;
+//
+//     if (tree->size == 0) {
+//       tree->root = NULL;
+//     }
+//
+//     return 0;
+//   }
+//
+//   return -1;
+// }
+//
+// =======
+// >>>>>>> Stashed changes
 // TAKEN FROM THE INTERNET
 //
 // https://gist.github.com/ximik777/e04e5a9f0548a2f41cb09530924bdd9a/
@@ -798,18 +801,286 @@ void print_ascii_tree(rb_node_t *t) {
 
 // THE ABOVE WAS TAKEN FROM THE INTERNET
 
+static inline void rb_print_node(rb_node_t *node) {
+  if (node == NULL) {
+    printf("(nil)");
+  } else {
+    printf("%p {\n"
+           "  .value=%d\n"
+           "  .parent=%p\n"
+           "  .child=[%p,%p]\n"
+           "  .color=%s\n"
+           "}\n",
+           node, node->value, node->parent, node->child[LEFT],
+           node->child[RIGHT], (node->color == BLACK) ? "BLACK" : "RED");
+  }
+}
+
+typedef struct rb_tree {
+  rb_node_t *root;
+  uint64_t size;
+} rb_tree_t;
+
+#define NIL (NULL)
+
+rb_tree_t rb_tree_create(int value) {
+  rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
+  node->value = value;
+  node->parent = NULL;
+  LCHILD(node) = NIL;
+  RCHILD(node) = NIL;
+  node->color = BLACK;
+
+  rb_tree_t tree = {.root = node, .size = 1};
+
+  return tree;
+}
+
+void rb_tree_free(rb_tree_t *tree) {
+  rb_node_stack_t node_stack = stack_create(tree->size);
+  rb_node_stack_t temp_stack = stack_create(tree->size);
+
+  stack_push(&temp_stack, tree->root);
+
+  while (!stack_is_empty(&temp_stack)) {
+    rb_node_t *node = stack_pop(&temp_stack);
+
+    if (LCHILD(node) != NULL) {
+      stack_push(&temp_stack, LCHILD(node));
+    }
+
+    if (RCHILD(node) != NULL) {
+      stack_push(&temp_stack, RCHILD(node));
+    }
+
+    stack_push(&node_stack, node);
+  }
+
+  while (!stack_is_empty(&node_stack)) {
+    free(stack_pop(&node_stack));
+  }
+
+  stack_free(&node_stack);
+  stack_free(&temp_stack);
+
+  tree->root = NULL;
+  tree->size = 0;
+}
+
+/*
+
+The below describes a left rotation.
+
+   Parent (or NULL)        Parent (or NULL)
+     \                         \
+    Node                        \
+      \                        Child
+      Child        =>          /   \
+      /  \                   Node   \
+     /    \                    \     Grandchild
+    T  Grandchild               T
+
+*/
+
+void rb_rotate(rb_node_t *node, int direction) {
+  if (node == NULL)
+    return;
+
+  rb_node_t *child = node->child[1 - direction];
+
+  if (child == NULL)
+    return;
+
+  rb_node_t *grandchild = child->child[1 - direction];
+
+  if (node->parent == NULL) {
+    child->parent = NULL;
+  } else {
+    child->parent = node->parent;
+
+    node->parent->child[DIR(node->parent, node)] = child;
+  }
+
+  node->child[1 - direction] = child->child[direction];
+
+  if (node->child[1 - direction] != NIL)
+    node->child[1 - direction]->parent = node->child[1 - direction];
+
+  child->child[direction] = node;
+
+  node->parent = child;
+}
+
+#define VALUEDIR(X, Y) ((X->value < Y->value) ? RIGHT : LEFT)
+
+bool rb_can_step(rb_node_t *node, rb_node_t *new_node) {
+  return node->child[VALUEDIR(node, new_node)] != NIL;
+}
+
+bool rb_is_black(rb_node_t *node) {
+  return node == NIL || node->color == BLACK;
+}
+
+rb_node_t *rb_get_sibling(rb_node_t *node) {
+  if (node->parent == NULL) {
+    return NULL;
+  }
+
+  return node->parent->child[1 - DIR(node->parent, node)];
+}
+
+bool rb_is_sibling_red(rb_node_t *node) {
+  return !rb_is_black(rb_get_sibling(node));
+}
+
+void rb_node_insert(rb_tree_t *tree, rb_node_t *node, rb_node_t *x_node) {
+  rb_node_t *current_node = node;
+
+  while (rb_can_step(current_node, x_node)) {
+    current_node = current_node->child[VALUEDIR(current_node, x_node)];
+  }
+
+  x_node->parent = current_node;
+
+  current_node->child[VALUEDIR(current_node, x_node)] = x_node;
+
+  rb_node_t *parent_node = current_node;
+
+  // note: if the parent does not have a parent then it is the
+  // root
+
+  while (parent_node != NULL && parent_node->color != BLACK) {
+    rb_node_t *grandparent_node = parent_node->parent;
+
+    if (rb_is_sibling_red(parent_node)) { // i.e. uncle of x_node
+      rb_node_t *sibling_node = rb_get_sibling(parent_node);
+
+      sibling_node->color = BLACK;
+      parent_node->color = BLACK;
+
+      if (grandparent_node->parent != NULL) {
+        grandparent_node->color = RED;
+      }
+    } else {
+      int direction = DIR(parent_node, x_node);
+      int parent_direction = DIR(grandparent_node, parent_node);
+
+      if (parent_direction == direction) {
+        rb_rotate(grandparent_node, 1 - parent_direction);
+
+        grandparent_node->color = RED;
+        parent_node->color = BLACK;
+
+        if (parent_node->parent == NULL)
+          tree->root = parent_node;
+      } else {
+        rb_rotate(parent_node, 1 - direction);
+        rb_rotate(grandparent_node, 1 - parent_direction);
+
+        grandparent_node->color = RED;
+        x_node->color = BLACK;
+
+        if (x_node->parent == NULL)
+          tree->root = x_node;
+      }
+
+      return;
+    }
+
+    x_node = grandparent_node;
+    parent_node = grandparent_node->parent;
+  }
+}
+
+void rb_tree_insert(rb_tree_t *tree, int value) {
+  rb_node_t *node = (rb_node_t *)malloc(sizeof(rb_node_t));
+  node->value = value;
+  node->parent = NULL;
+  RCHILD(node) = NIL;
+  LCHILD(node) = NIL;
+  node->color = RED;
+
+  if (tree->root != NULL) {
+    rb_node_insert(tree, tree->root, node);
+
+    tree->size++;
+
+    return;
+  }
+
+  node->color = BLACK;
+
+  tree->root = node;
+  tree->size = 1;
+}
+
+void rb_tree_remove(rb_tree_t *tree, int value) {
+
+}
+
+void rb_tree_print(rb_tree_t *tree) {
+  printf("Tree Size: %lu, ", tree->size);
+
+  rb_node_stack_t node_stack = stack_create(tree->size);
+  rb_node_stack_t temp_stack = stack_create(tree->size);
+
+  stack_push(&temp_stack, tree->root);
+
+  while (!stack_is_empty(&temp_stack)) {
+    rb_node_t *node = stack_pop(&temp_stack);
+
+    if (LCHILD(node) != NULL) {
+      stack_push(&temp_stack, LCHILD(node));
+    }
+
+    if (RCHILD(node) != NULL) {
+      stack_push(&temp_stack, RCHILD(node));
+    }
+
+    stack_push(&node_stack, node);
+  }
+
+  while (!stack_is_empty(&node_stack)) {
+    rb_node_t *node = stack_pop(&node_stack);
+
+    if (node->color == BLACK) {
+      printf("(B%d)", node->value);
+    } else {
+      printf("(R%d)", node->value);
+    }
+  }
+
+  printf("\n");
+
+  stack_free(&node_stack);
+  stack_free(&temp_stack);
+}
+//
+// bool rb_tree_find();
+//
+
 int main() {
   rb_tree_t tree = rb_tree_create(7);
-  avl_tree_insert(&tree, 3);
-  avl_tree_insert(&tree, 18);
-  avl_tree_insert(&tree, 10);
-  avl_tree_insert(&tree, 22);
-  avl_tree_insert(&tree, 26);
-  avl_tree_insert(&tree, 8);
-  avl_tree_insert(&tree, 11);
-
   print_ascii_tree(tree.root);
-  avl_tree_insert(&tree, 15);
+  rb_tree_insert(&tree, 3);
+  rb_print_node(tree.root);
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 18);
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 10);
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 22);
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 26);
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 8);
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 11);
+  rb_tree_print(&tree);
+
+  printf("before first tree\n");
+  print_ascii_tree(tree.root);
+  rb_tree_insert(&tree, 15);
   print_ascii_tree(tree.root);
 
   rb_tree_free(&tree);
